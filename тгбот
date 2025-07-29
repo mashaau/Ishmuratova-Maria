@@ -1,0 +1,1023 @@
+import telebot
+from telebot import types
+import math
+
+BOT_TOKEN = '7549231654:AAG-YlLKgxy7WID2QEjuVHGr8vz6BxHTckg'
+CHANNEL_ID = '-1002644634898'
+bot = telebot.TeleBot(BOT_TOKEN)
+
+# Словарь для хранения параметров БПЛА, введенных пользователем
+uav_params = {}
+
+user_data = {}  # Словарь для хранения выбранных пользователем значений
+
+# Переменная для хранения индекса БПЛА
+uav_index = None
+
+classification_options = {
+    'Назначение': {
+        'Авианесущие': '01', 'Бомбометание': '02', 'Грузовые': '03', 'Инженерно-саперные': '04',
+        'Наведение': '05', 'Перехватчики': '06', 'Разведывательные': '07', 'Ретрансляционные': '08', 'Ударные': '09'
+    },
+    'Запуск': {'Станковый': '1', 'Мобильный': '2', 'Многоступенчатый': '3'},
+    'Грузоподъемность': {'Сверхмалой': '1', 'Малой': '2', 'Средняя': '3', 'Большая': '4', 'Сверхбольшая': '5'},
+    'Скорость': {'Сверхмалая': '1', 'Малая': '2', 'Средняя': '3', 'Скоростная': '4', 'Суперскоростная': '5'},
+    'Дальность': {'Ближняя': '1', 'Малая': '2', 'Средняя': '3', 'Большая': '4', 'Сверхдальняя': '5'},
+    'Масса': {'Сверхлегкие': '1', 'Легкие': '2', 'Средние': '3', 'Тяжелые': '4', 'Сверхтяжелые': '5'},
+    'Область': {'Военные': 'В', 'Гражданские': 'Г', 'Учебные': 'У', 'Специальные': 'С'},
+    'Тип': {'Аэростатический': 'А', 'Вертолетный': 'В', 'Самолетный': 'С', 'Гибридный': 'Г'}
+}
+
+
+# Текст справки со списком команд
+COMMANDS_TEXT = """
+Дорогой пользователь! Это список всех команд, что тебе нужны.
+/start - Начать новый расчет параметров БПЛА.
+/help - Показать это справочное сообщение.
+/about - Информация о боте, его создателе и версии.
+/glossary - Глоссарий терминов, прочти перед использованием.
+/manual - Справочный материал для работы с БПЛА.
+/feedback - Оставить отзыв.
+/cancel - Отменить текущую операцию или диалог.
+"""
+
+ABOUT_TEXT = """
+_AeroCalc БПЛА: Ваш надежный помощник в проектировании и анализе беспилотников!_
+
+AeroCalc БПЛА - это Telegram-бот, разработанный для всестороннего расчета параметров беспилотных летательных аппаратов (БПЛА).  Независимо от того, являетесь ли вы опытным инженером, студентом или просто увлеченным энтузиастом, AeroCalc БПЛА предоставляет быстрый и точный способ для оценки ключевых характеристик вашего дрона.
+
+*Бот выполняет полный расчет параметров, включая:*
+
+1) Аэродинамические характеристики:  от размаха крыла и площади до коэффициентов подъемной силы и сопротивления.  Больше не нужно проводить сложные вычисления вручную – AeroCalc БПЛА предоставляет готовые к использованию данные.
+
+2) Весовые характеристики:  рассчитывает полную массу, массу конструкции, фюзеляжа, батареи и полезной нагрузки, что позволяет оптимизировать конструкцию для достижения желаемых характеристик.
+
+3) Характеристики устойчивости и управляемости: определяет центр масс, запас устойчивости, момент инерции и коэффициенты управления, что критически важно для стабильного и предсказуемого полета.
+
+4) Летные характеристики:  оценивает нагрузку на крыло, сопротивление воздуха, требуемую мощность и (в будущем) время полета, что позволяет оценить возможности вашего БПЛА.
+
+5) Пример расчёта траектории полёта: рассчитывает максимальную дальность полета, расстояние до точки, направление и время полета.
+
+
+*Преимущества AeroCalc БПЛА:*
+
+Быстрый и точный расчет:  Экономьте время и избегайте ошибок, используя автоматизированные расчеты.
+Удобство использования:  Получайте результаты прямо в Telegram, без необходимости использования сложного программного обеспечения.
+Всесторонний анализ:  Получайте полный набор параметров, необходимых для проектирования и анализа БПЛА.
+
+*Создателями AeroCalc БПЛА являются студенты 1 курса Московского авиационного института кафедры №14 "Передовая инженерная школа".
+Вот их полный список в соответствии с группой:*
+
+*М14О-101БВ-24:*
+Ергин Владислав Константинович 
+Жукова Ярослава Дмитриевна
+Ишмуратова Мария Алексеевна
+
+*М14О-102БВ-24:*
+Егорова Юлия Денисовна 
+Евсеева Мария Станиславовна 
+Забродила Дарья Андреевна 
+Шевцова Вера Сергеевна 
+
+*М14О-103БВ-24:*
+Игнатов Егор Вадимович
+
+*М14О-106БВ-24:*
+Негодников Дмитрий Николаевич
+
+_Присоединяйтесь к AeroCalc БПЛА сегодня и откройте новые горизонты в проектировании беспилотников! (В будущем)_
+
+Версия 1.0
+
+
+*Команды:*
+
+/start - Начать новый расчет параметров БПЛА.
+/help - Показать это справочное сообщение.
+/about - Информация о боте, его создателе и версии.
+/glossary - Глоссарий терминов, прочти перед использованием.
+/manual - Справочный материал для работы с БПЛА.
+/feedback - Оставить отзыв.
+/cancel - Отменить текущую операцию или диалог.
+"""
+
+HELP_TEXT = """
+_Добро пожаловать в AeroCalc БПЛА! Этот бот поможет вам рассчитать параметры вашего беспилотного летательного аппарата (БПЛА)._
+
+
+*Как пользоваться ботом:*
+1) /start - Начните работу с ботом. После этой команды, бот начнет задавать вам вопросы о параметрах вашего БПЛА.
+2) Пошаговый ввод параметров: Бот будет запрашивать информацию по очереди. Внимательно отвечайте на каждый вопрос, вводя необходимые значения.
+3) Получение результатов: После ввода всех необходимых параметров, бот автоматически произведет расчет и предоставит вам полный список характеристик вашего БПЛА.
+
+*Пример работы:*
+
+-- Вы вводите /start
+-- Бот: "Введите размах крыла (в метрах):"
+-- Вы: 4.0
+-- Бот: "Введите среднюю хорду (в метрах):"
+-- Вы: 0.6
+… и так далее, пока не введете все необходимые параметры.
+-- Бот: "Ваш расчёт завершен! Ниже представлен список параметров:"
+
+            === Полный расчёт параметров беспилотника ===
+            Размах крыла:               4.00 м
+            Средняя хорда:              6.00 м
+            Площадь крыла:              2.40 м²
+            ... и т.д. (полный список параметров)
+
+
+*Дополнительная информация:*
+1) Если вы сделали ошибку при вводе параметра, к сожалению, на данный момент нет возможности вернуться назад и исправить его. Вам придется начать расчет заново с помощью команды /start.  (В будущем планируется добавление этой функции).
+2) Бот ожидает ввод числовых значений. Убедитесь, что вы вводите только числа, используя точку (.) в качестве десятичного разделителя.
+3) Бот ожидает ввод реальных значений, то есть отрицательные числа он не воспринимает. Убедитесь, что вы вводите только подходящие по знаку числа.
+4) Бот находится в разработке, поэтому возможны небольшие неточности в расчетах.
+
+*Команды:*
+
+/start - Начать новый расчет параметров БПЛА.
+/help - Показать это справочное сообщение.
+/about - Информация о боте, его создателе и версии.
+/glossary - Глоссарий терминов, прочти перед использованием.
+/manual - Справочный материал для работы с БПЛА.
+/feedback - Оставить отзыв.
+/cancel - Отменить текущую операцию или диалог.
+
+_Спасибо за использование AeroCalc БПЛА! Надеемся, он поможет вам в проектировании и анализе ваших беспилотников!_
+"""
+
+GLOSSARY_TEXT = """ 
+_Глоссарий характеристик БПЛА!_
+
+Этот глоссарий поможет вам разобраться в терминах, используемых для описания характеристик беспилотных летательных аппаратов (БПЛА).
+
+
+*Основные характеристики:*
+
+Размах крыла: Расстояние от конца одного крыла до конца другого. (м)
+Средняя хорда крыла: Средняя ширина крыла. (м)
+Длина фюзеляжа: Длина корпуса БПЛА. (м)
+Диаметр фюзеляжа: Ширина корпуса БПЛА. (м)
+Плечо хвостового оперения: Расстояние от центра масс БПЛА до центра хвостового оперения. (м)
+Диаметр пропеллера: Размер пропеллера от одного конца до другого. (м)
+Шаг пропеллера: Расстояние, которое пропеллер проходит за один оборот в идеальных условиях. (м)
+Количество лопастей пропеллера: Число лопастей, из которых состоит пропеллер.
+Положение двигателя: Местоположение двигателя в БПЛА. (м)
+
+
+*Аэродинамические характеристики:*
+Площадь крыла: Общая площадь поверхности крыла. (м²)
+Удлинение крыла: Отношение размаха крыла к его средней хорде (характеризует форму крыла).
+Аэродинамическое качество: Отношение подъёмной силы к силе сопротивления (чем выше, тем лучше аэродинамика).
+Коэффициент подъёмной силы: Безразмерная величина, характеризующая подъёмную силу крыла.
+Коэффициент сопротивления: Безразмерная величина, характеризующая сопротивление воздуха.
+Угол атаки крыла: Угол между хордой крыла и направлением набегающего потока воздуха. (°).
+Сопротивление воздуха: Сила, препятствующая движению БПЛА в воздухе. (Н)
+
+
+*Массо-габаритные характеристики:*
+Полная масса: Общая масса БПЛА в снаряженном состоянии (конструкция + батарея + полезная нагрузка и т.д.). (кг)
+Масса конструкции: Масса всех компонентов БПЛА, за исключением батареи и полезной нагрузки. (кг)
+Масса батареи: Масса аккумуляторной батареи. (кг)
+Масса фюзеляжа: Масса корпуса БПЛА. (кг)
+Масса полезной нагрузки: Масса оборудования или груза, который БПЛА может нести. (кг)
+Нагрузка на крыло: Отношение полной массы БПЛА к площади крыла. (кг/м²)
+Центр масс: Точка, в которой сосредоточена вся масса БПЛА. (м)
+Запас устойчивости: Расстояние между центром масс и аэродинамическим фокусом (характеризует устойчивость БПЛА). (м)
+Момент инерции: Мера сопротивления тела изменению его вращательного движения. (кг·м²)
+
+
+*Характеристики силовой установки и полёта:*
+Скорость полёта: Скорость движения БПЛА в воздухе. (м/с)
+Ёмкость батареи: Количество энергии, которое может хранить аккумулятор. (Вт·ч)
+Мощность мотора: Количество энергии, которое двигатель может выдавать в единицу времени. (Вт)
+КПД мотора: Эффективность преобразования электрической энергии в механическую (%).
+КПД пропеллера: Эффективность преобразования мощности двигателя в тягу (%).
+Требуемая мощность: Мощность, необходимая для поддержания БПЛА в полете. (Вт)
+Время полёта: Продолжительность полёта БПЛА на одной зарядке батареи.
+Максимальная дальность полёта: Наибольшее расстояние, которое БПЛА может пролететь. (м)
+
+
+*Прочие характеристики:*
+Плотность воздуха: Масса воздуха в единице объема. (кг/м³)
+Ускорение свободного падения: Ускорение, которое получает тело под действием силы тяжести. (м/с²)
+Питчинг-момент: Момент силы, действующий на БПЛА в вертикальной плоскости, вызывающий вращение относительно поперечной оси. (Н·м)
+Запас прочности: Коэффициент, показывающий, во сколько раз нагрузки, которые может выдержать конструкция БПЛА, превышают расчётные.
+Максимальный коэффициент перегрузки: Максимальное значение перегрузки, которое может выдержать БПЛА.
+
+Этот глоссарий должен помочь вам лучше понять параметры и характеристики :).
+"""
+
+# Определение команд бота
+commands = [
+    types.BotCommand("start", "Начать новый расчет параметров БПЛА"),
+    types.BotCommand("help", "Показать это справочное сообщение"),
+    types.BotCommand("about", "Информация о боте, его создателе и версии"),
+    types.BotCommand("glossary", "Глоссарий терминов"),
+    types.BotCommand("manual", "Справочный материал для работы с БПЛА"),
+    types.BotCommand("feedback", "Оставить отзыв"),
+    types.BotCommand("cancel", "Отменить текущую операцию")
+]
+
+# Установка команд для бота
+bot.set_my_commands(commands)
+
+# Обработчик команды /start
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    # Создаем основную клавиатуру
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    start_button = types.KeyboardButton("Начать работу")
+    commands_button = types.KeyboardButton("Вызов всех команд")  # Кнопка "Вызов всех команд"
+    item = types.KeyboardButton("Создать индекс БЛА")
+    markup.add(start_button, commands_button, item) # Добавляем кнопки в клавиатуру
+    bot.send_message(message.chat.id, "Привет! Нажмите кнопку *'Начать работу'*, чтобы начать. Нажми кнопку *'Создать ИНДЕКС БПЛА'*, чтобы создать свой индивидуальный индекс, или *'Вызов всех команд'* для списка команд.", reply_markup=markup, parse_mode="Markdown")
+
+
+# Обработчик команды /help
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    bot.send_message(message.chat.id, HELP_TEXT, parse_mode="Markdown")
+
+# Обработчик команды /glossary
+@bot.message_handler(commands=['glossary'])
+def send_help(message):
+    bot.send_message(message.chat.id, GLOSSARY_TEXT,parse_mode="Markdown")
+
+@bot.message_handler(commands=['manual'])
+def manual(message):
+    text = """
+    _**Руководство пользователя БПЛА**_
+
+    Эта команда предоставляет доступ к справочным материалам, которые помогут вам в работе с ботом и БПЛА.
+
+    Доступные команды:
+
+    *   /shortguide - Краткое пособие (PDF) *
+    *   /literature - Список всей литературы для работы с БПЛА (PDF) *
+    """
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+
+@bot.message_handler(commands=['shortguide'])
+def shortguide(message):
+    text = "Краткое пособие по БПЛА: [Краткое пособие](https://drive.google.com/file/d/1Fa7OMe93eDi09gvM6QYfNCIHxeT3v42H/view?usp=drive_link)"
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+@bot.message_handler(commands=['literature'])
+def literature(message):
+    text = "Полная версия руководства по БПЛА: [Полная версия](https://insagro.sursau.ru/upload/iblock/938/f9f53wi5g7jdk8mudu2m3lathxjjdm33/bpla.pdf)"
+    bot.reply_to(message, text, parse_mode="Markdown")
+
+# Обработчик команды /about
+@bot.message_handler(commands=['about'])
+def send_about(message):
+    bot.send_message(message.chat.id, ABOUT_TEXT, parse_mode="Markdown")
+
+# Обработчик команды /cancel
+@bot.message_handler(commands=['cancel'])
+def cancel_operation(message):
+    uav_params.clear()
+    feedback_data.pop(message.chat.id, None)
+    bot.send_message(message.chat.id, "*Операция отменена.* Можете начать заново с /start", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
+
+# Альтернативная обработка текстовой кнопки "Отменить" (если понадобится)
+@bot.message_handler(func=lambda message: message.text.lower() == "отменить")
+def cancel_text_operation(message):
+    uav_params.clear()
+    feedback_data.pop(message.chat.id, None)
+    bot.send_message(message.chat.id, "*Операция отменена.* Можете начать заново с /start", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
+
+# Обработчик нажатия на кнопку "Вызов всех команд"
+@bot.message_handler(func=lambda message: message.text == "Вызов всех команд")
+def send_commands_list(message):
+    bot.send_message(message.chat.id, COMMANDS_TEXT)
+
+@bot.message_handler(func=lambda message: message.text == "Начать работу")
+def start_calculation(message):
+     bot.send_message(message.chat.id, "В процессе ввода в пример будут приводиться средние значения параметров для небольшого и среднего БПЛА (например, для аэрофотосъемки, доставки небольших грузов или мониторинга):\n"
+                                       "*Введите размах крыла (м) (например, 1.5 - 3 м):*", parse_mode="Markdown", reply_markup=types.ReplyKeyboardRemove())
+     bot.register_next_step_handler(message, get_wing_span)
+
+
+# Эта функция обрабатывает нажатие на кнопку "Создать индекс БПЛА"
+@bot.message_handler(func=lambda message: message.text == "Создать индекс БЛА")
+def create_index_handler(message):
+    """
+    Обработчик для начала процесса создания индекса БПЛА.
+    Запускает последовательность запросов к пользователю для получения параметров БПЛА.
+    """
+    user_id = message.chat.id
+    user_data[user_id] = {}  # Инициализируем данные пользователя
+
+    # Начинаем опрос с первого параметра - Назначение
+    ask_parameter(message, 'Назначение')
+
+def ask_parameter(message, parameter_name):
+    """
+    Запрашивает у пользователя значение для указанного параметра.
+    """
+    user_id = message.chat.id
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    options = list(classification_options[parameter_name].keys())
+    for option in options:
+        markup.add(option)
+    msg = bot.send_message(user_id, f"Выберите {parameter_name}:", reply_markup=markup)
+    bot.register_next_step_handler(msg, process_parameter_value, parameter_name)
+
+def process_parameter_value(message, parameter_name):
+    """
+    Обрабатывает введенное пользователем значение параметра и запрашивает следующий параметр, если есть.
+    """
+    global uav_index
+    user_id = message.chat.id
+    selected_value = message.text
+    if selected_value not in classification_options[parameter_name]:
+        bot.send_message(user_id, "Пожалуйста, выберите значение из предложенного списка.")
+        ask_parameter(message, parameter_name)  # Повторно запрашиваем параметр
+        return
+
+    user_data[user_id][parameter_name] = classification_options[parameter_name][selected_value] # Сохраняем код выбранного значения
+
+    # Определяем следующий параметр для запроса
+    parameter_sequence = ['Назначение', 'Запуск', 'Грузоподъемность', 'Скорость', 'Дальность', 'Масса', 'Область', 'Тип']
+    current_index = parameter_sequence.index(parameter_name)
+    next_index = current_index + 1
+
+    if next_index < len(parameter_sequence):
+        next_parameter = parameter_sequence[next_index]
+        ask_parameter(message, next_parameter)
+    else:
+        # Если все параметры собраны, формируем и сохраняем индекс
+        uav_index = ''.join(user_data[user_id][param] for param in parameter_sequence)
+        bot.send_message(user_id, f"Ваш индекс БПЛА: {uav_index}", reply_markup=types.ReplyKeyboardRemove())
+        del user_data[user_id]  # Очищаем данные пользователя
+
+
+
+feedback_data = {}  # Словарь для хранения данных обратной связи
+
+# Обработчик команды /feedback
+@bot.message_handler(commands=['feedback'])
+def feedback_start(message):
+    feedback_data[message.chat.id] = {}  # Инициализация данных для пользователя
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    # Создаем кнопки для оценки
+    markup.add(types.KeyboardButton("⭐️"), types.KeyboardButton("⭐️⭐️"), types.KeyboardButton("⭐️⭐️⭐️"), types.KeyboardButton("⭐️⭐️⭐️⭐️"), types.KeyboardButton("⭐️⭐️⭐️⭐️⭐️"))
+    bot.send_message(message.chat.id, "Оцените нашу работу (от 1 до 5 звезд):", reply_markup=markup)
+    bot.register_next_step_handler(message, get_rating)
+
+def get_rating(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    rating = message.text.count("⭐️")  # Подсчитываем звезды
+    if 1 <= rating <= 5:
+        feedback_data[message.chat.id]['rating'] = rating
+        bot.send_message(message.chat.id, "Спасибо за оценку! Теперь, пожалуйста, оставьте свой отзыв:", reply_markup=types.ReplyKeyboardRemove())
+        bot.register_next_step_handler(message, get_feedback)
+    else:
+        bot.send_message(message.chat.id, "Пожалуйста, выберите оценку от 1 до 5 звезд.")
+        bot.register_next_step_handler(message, get_rating)  # Повторный запрос оценки
+
+def get_feedback(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    feedback = message.text
+    feedback_data[message.chat.id]['feedback'] = feedback
+    # Формируем анонимное сообщение для канала
+    anonymous_message = f"Новый отзыв:\nОценка: {feedback_data[message.chat.id]['rating']} звезд\nОтзыв: {feedback}"
+    bot.send_message(CHANNEL_ID, anonymous_message)  # Отправка в канал
+    bot.send_message(message.chat.id, "Спасибо за ваш отзыв! Он был анонимно отправлен в канал https://t.me/otzivaerocalcbpla.")
+    del feedback_data[message.chat.id]  # Очистка данных пользователя
+
+
+def get_wing_span(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        wing_span = float(message.text)
+        if wing_span <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")  # Вызываем ValueError, если значение отрицательное
+        uav_params['wing_span'] = wing_span
+        bot.send_message(message.chat.id, "Введите среднюю хорду (м) (например, 0.2 м):")
+        bot.register_next_step_handler(message, get_mean_chord)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для размаха крыла.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для размаха крыла.")
+        bot.register_next_step_handler(message, get_wing_span)
+
+# Функция для последовательного запроса остальных параметров
+def get_mean_chord(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        mean_chord = float(message.text)
+        if mean_chord <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['mean_chord'] = mean_chord
+        bot.send_message(message.chat.id, "Введите скорость (м/с) (например, 10 м/с):")
+        bot.register_next_step_handler(message, get_velocity)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для средней хорды.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для средней хорды.")
+        bot.register_next_step_handler(message, get_mean_chord)
+
+def get_velocity(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        velocity = float(message.text)
+        if velocity <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['velocity'] = velocity
+        bot.send_message(message.chat.id, "Введите плотность воздуха (кг/м^3) (например, на уровне моря, стандартные условия: 1.225 кг/м³):")
+        bot.register_next_step_handler(message, get_air_density)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для скорости.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для скорости.")
+        bot.register_next_step_handler(message, get_velocity)
+
+def get_air_density(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        air_density = float(message.text)
+        if air_density <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['air_density'] = air_density
+        bot.send_message(message.chat.id, "Введите массу полезной нагрузки (кг) (например, 3 кг):")
+        bot.register_next_step_handler(message, get_payload_mass)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для плотности воздуха.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для плотности воздуха.")
+        bot.register_next_step_handler(message, get_air_density)
+
+def get_payload_mass(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        payload_mass = float(message.text)
+        if payload_mass <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['payload_mass'] = payload_mass
+        bot.send_message(message.chat.id, "Введите емкость батареи (Вт*ч) (например, 2000 Вт·ч):")
+        bot.register_next_step_handler(message, get_battery_capacity_wh)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для массы полезной нагрузки.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для массы полезной нагрузки.")
+        bot.register_next_step_handler(message, get_payload_mass)
+
+def get_battery_capacity_wh(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        battery_capacity_wh = float(message.text)
+        if battery_capacity_wh <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['battery_capacity_wh'] = battery_capacity_wh
+        bot.send_message(message.chat.id, "Введите мощность мотора (Вт) (например, 500 Вт):")
+        bot.register_next_step_handler(message, get_motor_power_w)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для емкости батареи.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для емкости батареи.")
+        bot.register_next_step_handler(message, get_battery_capacity_wh)
+
+def get_motor_power_w(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        motor_power_w = float(message.text)
+        if motor_power_w <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['motor_power_w'] = motor_power_w
+        bot.send_message(message.chat.id, "Введите длину фюзеляжа (м) (например, 2 м):")
+        bot.register_next_step_handler(message, get_fuselage_length)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для мощности мотора.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для мощности мотора.")
+        bot.register_next_step_handler(message, get_motor_power_w)
+
+def get_fuselage_length(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        fuselage_length = float(message.text)
+        if fuselage_length <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['fuselage_length'] = fuselage_length
+        bot.send_message(message.chat.id, "Введите диаметр фюзеляжа (м) (например, 0.2 м):")
+        bot.register_next_step_handler(message, get_fuselage_diameter)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для длины фюзеляжа.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для длины фюзеляжа.")
+        bot.register_next_step_handler(message, get_fuselage_length)
+
+def get_fuselage_diameter(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        fuselage_diameter = float(message.text)
+        if fuselage_diameter <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['fuselage_diameter'] = fuselage_diameter
+        bot.send_message(message.chat.id, "Введите плечо хвостового оперения (м) (например, 1 м):")
+        bot.register_next_step_handler(message, get_tail_arm)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для диаметра фюзеляжа.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для диаметра фюзеляжа.")
+        bot.register_next_step_handler(message, get_fuselage_diameter)
+
+def get_tail_arm(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        tail_arm = float(message.text)
+        if tail_arm <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['tail_arm'] = tail_arm
+        bot.send_message(message.chat.id, "Введите площадь хвостового оперения (м^2) (например, 0.8 м²):")
+        bot.register_next_step_handler(message, get_tail_area)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для плеча хвостового оперения.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для плеча хвостового оперения.")
+        bot.register_next_step_handler(message, get_tail_arm)
+
+def get_tail_area(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        tail_area = float(message.text)
+        if tail_area <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['tail_area'] = tail_area
+        bot.send_message(message.chat.id, "Введите базовый коэффициент лобового сопротивления (например, 0.08):")
+        bot.register_next_step_handler(message, get_cd0)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для площади хвостового оперения.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для площади хвостового оперения.")
+        bot.register_next_step_handler(message, get_tail_area)
+
+def get_cd0(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        cd0 = float(message.text)
+        if cd0 <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['cd0'] = cd0
+        bot.send_message(message.chat.id, "Введите коэффициент индуктивного сопротивления: (например, 0.08)")
+        bot.register_next_step_handler(message, get_k)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для базового коэффициента лобового сопротивления.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для базового коэффициента лобового сопротивления.")
+        bot.register_next_step_handler(message, get_cd0)
+
+def get_k(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        k = float(message.text)
+        if k <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['k'] = k
+        bot.send_message(message.chat.id, "Введите долю массы конструкции в общей массе аппарата без полезной нагрузки и батарей (например, 0.6.):")
+        bot.register_next_step_handler(message, get_structural_mass_fraction)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для коэффициента индуктивного сопротивления.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для коэффициента индуктивного сопротивления.")
+        bot.register_next_step_handler(message, get_k)
+
+def get_structural_mass_fraction(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        structural_mass_fraction = float(message.text)
+        if not 0 <= structural_mass_fraction <= 1:
+            raise ValueError("Значение должно быть в процентном виде от 0 до 1, но больше 0")
+        uav_params['structural_mass_fraction'] = structural_mass_fraction
+        bot.send_message(message.chat.id, "Введите долю массы фюзеляжа в общей массе конструкции (например, 0.3):")
+        bot.register_next_step_handler(message, get_fuselage_mass_fraction)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для доли массы конструкции в общей массе аппарата без полезной нагрузки и батарей.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для доли массы конструкции в общей массе аппарата без полезной нагрузки и батарей.")
+        bot.register_next_step_handler(message, get_structural_mass_fraction)
+
+def get_fuselage_mass_fraction(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        fuselage_mass_fraction = float(message.text)
+        if not 0 <= fuselage_mass_fraction <= 100:
+            raise ValueError("Значение должно быть в процентном виде от 0% до 100%, но больше 0%")
+        uav_params['fuselage_mass_fraction'] = fuselage_mass_fraction
+        bot.send_message(message.chat.id, "Введите относительное положение центра масс по длине фюзеляжа(доля от носа в %) (например, 50%):")
+        bot.register_next_step_handler(message, get_cg_position_fraction)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для доли массы фюзеляжа в общей массе конструкции.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для доли массы фюзеляжа в общей массе конструкции.")
+        bot.register_next_step_handler(message, get_fuselage_mass_fraction)
+
+def get_cg_position_fraction(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        cg_position_fraction = float(message.text)
+        if cg_position_fraction <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['cg_position_fraction'] = cg_position_fraction
+        bot.send_message(message.chat.id, "Введите угол атаки крыла (в градусах) (например, 8° (в крейсерском режиме)):")
+        bot.register_next_step_handler(message, get_angle_of_attack_deg)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для относительного положения центра масс по длине фюзеляжа(доля от носа).")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для относительного положения центра масс по длине фюзеляжа(доля от носа).")
+        bot.register_next_step_handler(message, get_cg_position_fraction)
+
+def get_angle_of_attack_deg(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        angle_of_attack_deg = float(message.text)
+        if angle_of_attack_deg <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['angle_of_attack_deg'] = angle_of_attack_deg
+        bot.send_message(message.chat.id, "Введите максимальную перегрузку (в единицах g) (например, 3 g):")
+        bot.register_next_step_handler(message, get_max_load_factor)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для угола атаки крыла в градусах.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для угола атаки крыла в градусах.")
+        bot.register_next_step_handler(message, get_angle_of_attack_deg)
+
+def get_max_load_factor(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        max_load_factor = float(message.text)
+        if max_load_factor <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['max_load_factor'] = max_load_factor
+        bot.send_message(message.chat.id, "Введите диаметр пропеллера(м) (например, 0.4 м):")
+        bot.register_next_step_handler(message, get_propeller_diameter)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для максимальной перегрузки (в единицах g).")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для максимальной перегрузки (в единицах g).")
+        bot.register_next_step_handler(message, get_max_load_factor)
+
+def get_propeller_diameter(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        propeller_diameter = float(message.text)
+        if propeller_diameter <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['propeller_diameter'] = propeller_diameter
+        bot.send_message(message.chat.id, "Введите шаг пропеллера в метрах (например, 0.3 м):")
+        bot.register_next_step_handler(message, get_propeller_pitch)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для диаметра пропеллера.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для диаметра пропеллера.")
+        bot.register_next_step_handler(message, get_propeller_diameter)
+
+def get_propeller_pitch(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        propeller_pitch = float(message.text)
+        if propeller_pitch <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['propeller_pitch'] = propeller_pitch
+        bot.send_message(message.chat.id, "Введите количество лопастей пропеллера (например, 2 ):")
+        bot.register_next_step_handler(message, get_number_of_blades)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для шага пропеллера в метрах.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для шага пропеллера в метрах.")
+        bot.register_next_step_handler(message, get_propeller_pitch)
+
+def get_number_of_blades(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        number_of_blades = int(message.text)
+        if number_of_blades <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['number_of_blades'] = number_of_blades
+        bot.send_message(message.chat.id, "Введите эффективность мотора (КПД от 0 до 100 %) (например, 90 %):")
+        bot.register_next_step_handler(message, get_efficiency_motor)
+    except ValueError as e:
+        if "Значение не может быть отрицательным" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для количества лопастей пропеллера.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите целочисленное значение количества лопастей пропеллера.")
+        bot.register_next_step_handler(message, get_number_of_blades)
+
+def get_efficiency_motor(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+        efficiency_motor = float(message.text)
+        # Проверяем, что КПД находится в диапазоне от 0% до 100%
+        if not 0 <= efficiency_motor <= 100:
+            raise ValueError("Значение должно быть в процентном виде от 0% до 100%, но больше 0%")
+        uav_params['efficiency_motor'] = efficiency_motor
+        bot.send_message(message.chat.id, "Введите эффективность пропеллера (КПД от 0 до 100 %) (например, 80 %):")
+        bot.register_next_step_handler(message, get_efficiency_prop)
+    except ValueError as e:
+        if "Значение не может быть отрицательным или равным 0" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для эффективности мотора.")
+        elif "Значение должно быть от от 0 до 100 %, но больше 0" in str(e):
+            bot.reply_to(message, "Пожалуйста, введите значение эффективности мотора от 0 до 100 %, но больше 0.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для эффективности мотора.")
+        bot.register_next_step_handler(message, get_efficiency_motor)
+
+
+def get_efficiency_prop(message):
+    if message.text == "/cancel":
+        cancel_operation(message)
+        return
+    try:
+
+        efficiency_value_prop = float(message.text)  # Переименовали переменную
+        if not 0 <= efficiency_value_prop <= 100:
+            raise ValueError("Значение должно быть от 0 до 100 %, но больше 0")
+        if efficiency_value_prop <= 0:
+            raise ValueError("Значение не может быть отрицательным или равным 0")
+        uav_params['efficiency_prop'] = efficiency_value_prop
+
+        # После получения всех параметров, создаем экземпляр класса и выводим информацию
+        uav = UAVComprehensiveModel(**uav_params)
+        summary = uav.print_summary_string()  # Получаем summary как строку
+        bot.send_message(message.chat.id, summary)
+    except ValueError as e:
+        if "Значение не может быть отрицательным или равным 0" in str(e):
+             bot.reply_to(message, "Пожалуйста, введите положительное числовое значение для эффективности пропеллера.")
+        elif "Значение должно быть от 0 до 100 %, но больше 0" in str(e):
+            bot.reply_to(message, "Пожалуйста, введите значение эффективности пропеллера от 0 до 100 %, но больше 0.")
+        else:
+            bot.reply_to(message, "Пожалуйста, введите числовое значение для эффективности пропеллера.")
+    except Exception as e:
+        bot.reply_to(message, f"Попробуйте снова :)  /start .Произошла ошибка при создании вашего БПЛА: {e}" )
+
+class UAVComprehensiveModel:
+    def __init__(self,
+                 wing_span, mean_chord, velocity, air_density,
+                 payload_mass, battery_capacity_wh, motor_power_w,
+                 fuselage_length, fuselage_diameter,
+                 tail_arm, tail_area,
+                 cd0, k,
+                 structural_mass_fraction,
+                 fuselage_mass_fraction,
+                 cg_position_fraction,
+                 angle_of_attack_deg,
+                 max_load_factor,
+                 propeller_diameter,
+                 propeller_pitch,
+                 number_of_blades,
+                 efficiency_motor,
+                 efficiency_prop,
+                 gravity=9.81,
+                 flight_time_min=None):
+
+        # Инициализация параметров БПЛА. Значения по умолчанию для cd0, k и т.д.
+        self.wing_span = wing_span
+        self.mean_chord = mean_chord
+        self.wing_area = self.wing_span * self.mean_chord
+        self.aspect_ratio = self.wing_span ** 2 / self.wing_area
+
+        self.fuselage_length = fuselage_length
+        self.fuselage_diameter = fuselage_diameter
+        self.tail_arm = tail_arm
+        self.tail_area = tail_area
+        self.cd0 = cd0
+        self.k = k
+        self.structural_mass_fraction = structural_mass_fraction
+        self.fuselage_mass_fraction = fuselage_mass_fraction
+        self.cg_position_fraction = cg_position_fraction
+        self.angle_of_attack_deg = angle_of_attack_deg
+        self.max_load_factor = max_load_factor
+        self.propeller_diameter = propeller_diameter
+        self.propeller_pitch = propeller_pitch
+        self.number_of_blades = number_of_blades
+        self.efficiency_motor = efficiency_motor
+        self.efficiency_prop = efficiency_prop
+        self.velocity = velocity
+        self.air_density = air_density
+        self.payload_mass = payload_mass
+        self.battery_capacity_wh = battery_capacity_wh
+        self.motor_power_w = motor_power_w
+        self.gravity = gravity
+
+        # Расчет массы
+        self.structural_mass = self.structural_mass_fraction * self.wing_area
+        self.fuselage_mass = self.fuselage_mass_fraction * self.fuselage_length * self.fuselage_diameter
+        self.battery_mass = self.battery_capacity_wh / 100
+        self.total_mass = self.structural_mass + self.fuselage_mass + self.battery_mass + self.payload_mass
+
+        # Аэродинамика
+        self.lift_coefficient = 2 * self.total_mass * self.gravity / (self.air_density * self.velocity ** 2 * self.wing_area)
+        self.drag_coefficient = self.cd0 + self.k * self.lift_coefficient ** 2
+        self.lift_drag_ratio = self.lift_coefficient / self.drag_coefficient
+        self.drag_force = 0.5 * self.air_density * self.velocity ** 2 * self.wing_area * self.drag_coefficient
+
+        # Мощность и время полета
+        self.efficiency_prop = efficiency_prop / 100  # Преобразуем КПД пропеллера из процентов в десятичную дробь
+        self.efficiency_motor = efficiency_motor / 100  # Преобразуем КПД двигателя из процентов в десятичную дробь
+        self.required_power = self.drag_force * self.velocity / self.efficiency_prop  # учитываем КПД пропеллера
+        self.flight_time_min = (self.battery_capacity_wh * self.efficiency_motor) / (self.required_power + 1e-9) * 60 if flight_time_min is None else flight_time_min # учитываем КПД мотора и избегаем деления на ноль
+
+        # Положение центра масс и запас устойчивости (упрощенно)
+        self.cg_position = self.cg_position_fraction * self.fuselage_length
+        self.stability_margin = 0.1  # Примерное значение
+
+        # Момент инерции (упрощенно)
+        self.moment_of_inertia = 0.1 * self.total_mass * (self.wing_span ** 2 + self.fuselage_length ** 2)
+
+        # Питчинг-момент (упрощенно)
+        self.pitching_moment = 0.05 * self.total_mass * self.gravity * self.mean_chord
+
+        # Нагрузка на крыло
+        self.wing_loading = self.total_mass / self.wing_area
+
+        # Рассчитываем текущий коэффициент подъемной силы
+        lift_coefficient = (self.total_mass * self.gravity) / (
+                    0.5 * self.air_density * self.velocity ** 2 * self.wing_area)
+
+        # Рассчитываем текущий коэффициент перегрузки (load factor)
+        current_load_factor = lift_coefficient  # В прямолинейном полете без ускорений load_factor == lift_coefficient
+
+        # Рассчитываем запас прочности
+        if current_load_factor > 0:
+            self.safety_factor = self.max_load_factor / current_load_factor
+        else:
+            self.safety_factor = float('inf')  # Или другое подходящее значение, если нет подъемной силы
+
+        # Оптимальное положение двигателя (упрощенно)
+        self.optimal_engine_position = (self.cg_position, 0)
+
+        # Приближённые коэффициенты управления (упрощенно)
+        self.cL_alpha = 0.1  # Изменение коэффициента подъемной силы с углом атаки
+        self.cD_alpha = 0.01 # Изменение коэффициента сопротивления с углом атаки
+        self.cm_alpha = -0.05 # Изменение коэффициента момента тангажа с углом атаки
+        self.cY_beta  = 0.02  # Изменение коэффициента боковой силы с углом скольжения
+        self.cl_beta  = -0.03 # Изменение коэффициента крена с углом скольжения
+        self.cn_beta  = 0.01  # Изменение коэффициента рыскания с углом скольжения
+
+        self.flight_path = [] # Инициализация flight_path
+    def calculate_max_flight_distance(self):
+        """
+        Рассчитывает максимальную дальность полета на основе скорости и времени полета.
+        """
+        flight_time_sec = self.flight_time_min * 60
+        max_distance = self.velocity * flight_time_sec
+        return max_distance
+
+    @staticmethod
+    def calculate_flight_direction(start, end):
+        """
+        Рассчитывает направление полета в градусах между двумя точками.
+        """
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        direction_rad = math.atan2(dy, dx)
+        return math.degrees(direction_rad)
+
+    def calculate_flight_time_to_point(self, start, end):
+        """
+        Рассчитывает время полета до указанной точки.
+        """
+        max_distance = self.calculate_max_flight_distance()
+        return max_distance / self.velocity
+
+    def simulate_flight(self, start, end, time_step=1.0):
+        """
+        Моделирует полет между двумя точками и возвращает траекторию полета.
+        """
+        direction_deg = self.calculate_flight_direction(start, end)
+        direction_rad = math.radians(direction_deg)
+
+        max_distance = self.calculate_max_flight_distance()
+        total_time = max_distance / self.velocity
+        steps = int(total_time / time_step)
+        path = []
+        for step in range(steps + 1):
+            t = step * time_step
+            x = start[0] + self.velocity * t * math.cos(direction_rad)
+            y = start[1] + self.velocity * t * math.sin(direction_rad)
+            path.append((x, y))
+        self.flight_path = path
+        return path
+
+    def print_summary_string(self):
+        summary = "=== Полный расчёт параметров беспилотника ===\n"
+        summary += f"Размах крыла:               {self.wing_span:.2f} м\n"
+        summary += f"Средняя хорда:              {self.mean_chord:.2f} м\n"
+        summary += f"Площадь крыла:              {self.wing_area:.2f} м²\n"
+        summary += f"Удлинение крыла:            {self.aspect_ratio:.2f}\n"
+        summary += f"Угол атаки:                 {self.angle_of_attack_deg}°\n"
+        summary += f"Коэффициент подъемной силы: {self.lift_coefficient:.3f}\n"
+        summary += f"Коэффициент сопротивления:  {self.drag_coefficient:.3f}\n"
+        summary += f"Аэродинамическое качество:  {self.lift_drag_ratio:.2f}\n"
+        summary += f"Полная масса:               {self.total_mass:.2f} кг\n"
+        summary += f"Масса конструкции:          {self.structural_mass:.2f} кг\n"
+        summary += f"Масса фюзеляжа:             {self.fuselage_mass:.2f} кг\n"
+        summary += f"Масса батареи:              {self.battery_mass:.2f} кг\n"
+        summary += f"Масса полезной нагрузки:    {self.payload_mass:.2f} кг\n"
+        summary += f"Центр масс (от носа):       {self.cg_position:.2f} м\n"
+        summary += f"Запас устойчивости:         {self.stability_margin:.3f} м\n"
+        summary += f"Момент инерции:             {self.moment_of_inertia:.2f} кг·м²\n"
+        summary += f"Питчинг-момент:             {self.pitching_moment:.2f} Н·м\n"
+        summary += f"Нагрузка на крыло:          {self.wing_loading:.2f} кг/м²\n"
+        summary += f"Сопротивление воздуха:      {self.drag_force:.2f} Н\n"
+        summary += f"Требуемая мощность:         {self.required_power:.2f} Вт\n"
+        summary += f"Запас прочности:            {self.safety_factor:.2f}\n"
+        summary += f"Оптимальное положение двигателя (x, y): {self.optimal_engine_position[0]:.2f} м, {self.optimal_engine_position[1]:.2f} м\n"
+        summary += f"Приближённые коэффициенты управления:\n"
+        summary += f"Изменение коэффициента подъемной силы с углом атаки: = {self.cL_alpha:.2f} 1/рад\n"
+        summary += f"Изменение коэффициента сопротивления с углом атаки: = {self.cD_alpha:.2f} 1/рад\n"
+        summary += f"Изменение коэффициента момента тангажа с углом атаки: = {self.cm_alpha:.2f} 1/рад\n"
+        summary += f"Изменение коэффициента боковой силы с углом скольжения:  = {self.cY_beta:.2f} 1/рад\n"
+        summary += f"Изменение коэффициента крена с углом скольжения:  = {self.cl_beta:.2f} 1/рад\n"
+        summary += f"Изменение коэффициента рыскания с углом скольжения:  = {self.cn_beta:.2f} 1/рад\n"
+        summary += f"Пример расчёта траектории полёта:\n"
+        start = (0, 0)
+        end = (1000, 500)
+        path = self.simulate_flight(start, end, time_step=10)
+        summary += f"Максимальная дальность полета: {self.calculate_max_flight_distance():.2f} м\n"
+        summary += f"  Направление: {self.calculate_flight_direction(start, end):.1f}°\n"
+        summary += f"  Время до точки:{self.calculate_flight_time_to_point(start, end):.1f} с\n"
+        summary += f"  Количество точек траектории: {len(path)}\n"
+        summary += f"\n"
+        # Добавляем индекс БПЛА в итоговый отчет
+        if uav_index:
+            summary += f"Индекс БПЛА: {uav_index}\n"
+        else:
+            summary += "Индекс БПЛА не был создан.\n"
+        summary += f"\n"
+        summary += f" Пожалуйста, оставьте ваш отзыв о работе бота /feedback. Нам очень важно ваше мнение для развития проекта."
+        return summary
+
+# Запуск бота
+bot.polling(none_stop=True, interval=0)
