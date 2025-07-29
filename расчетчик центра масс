@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Редактор самолёта</title>
+    <style>
+        body {
+          margin: 0;
+          font-family: Arial, sans-serif;
+        }
+
+        .container {
+          display: flex;
+          height: 100vh;
+        }
+
+        .sidebar {
+          width: 220px;
+          background-color: #f3f3f3;
+          border-right: 1px solid #ccc;
+          padding: 10px;
+          box-sizing: border-box;
+        }
+
+        .sidebar h3 {
+          font-size: 16px;
+          margin-bottom: 10px;
+        }
+
+        .sidebar input[type="number"] {
+          width: 100%;
+          padding: 6px;
+          margin-bottom: 10px;
+          box-sizing: border-box;
+        }
+
+        .sidebar button, .sidebar select {
+          width: 100%;
+          margin-bottom: 10px;
+          padding: 6px;
+          font-size: 14px;
+        }
+
+        .sidebar label {
+          display: block;
+          font-size: 14px;
+          margin-bottom: 6px;
+        }
+
+        .sidebar .group-title {
+          font-weight: bold;
+          margin-top: 15px;
+          margin-bottom: 5px;
+        }
+
+        .main {
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: flex-start;
+          padding: 10px;
+          box-sizing: border-box;
+          height: 100vh;
+        }
+
+        .tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-bottom: 5px;
+          width: 100%;
+          position: relative;
+        }
+
+        .tabs button {
+          padding: 5px 10px;
+          font-size: 14px;
+          background-color: #f0f0f0;
+          border: 1px solid #ccc;
+          cursor: pointer;
+          position: relative;
+          user-select: none;
+        }
+
+        /* Контейнер для селекторов с выпадающим списком */
+        .selector-container {
+          position: relative;
+        }
+
+        /* Выпадающий список превью */
+        .preview-list {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          background: white;
+          border: 1px solid #ccc;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          z-index: 100;
+          display: none;
+          max-height: 180px;
+          overflow-y: auto;
+          width: max-content;
+          padding: 5px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          min-width: 150px;
+        }
+
+        .preview-list img {
+          width: 60px;
+          height: 60px;
+          object-fit: contain;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: border-color 0.2s;
+          border-radius: 4px;
+          background: #fafafa;
+        }
+
+        .preview-list img:hover {
+          border-color: #007bff;
+        }
+
+        .preview-list img.selected {
+          border-color: #007bff;
+          box-shadow: 0 0 5px #007bff;
+        }
+
+        .plane {
+          position: relative;
+          flex-grow: 1;
+          width: 100%;
+          border: 2px solid #000;
+          background:
+            repeating-linear-gradient(to right, #ddd 0, #ddd 1px, transparent 1px, transparent 30px),
+            repeating-linear-gradient(to bottom, #ddd 0, #ddd 1px, transparent 1px, transparent 30px);
+          user-select: none;
+        }
+
+        .label {
+  position: absolute;
+  font-size: 12px;
+  color: #333;
+  user-select: none;
+  pointer-events: none;
+}
+
+.label-x {
+  bottom: -18px;
+  transform: translateX(-50%);
+}
+
+.label-y {
+  left: -25px;
+  transform: translateY(50%);
+}
+
+        #follower, #overlay {
+          position: absolute;
+          user-select: none;
+          -webkit-user-drag: none;
+          cursor: grab;
+        }
+
+        #follower {
+          max-width: 25%;
+          height: auto;
+          z-index: 5;
+        }
+
+        #overlay {
+          max-width: 150px;
+          max-height: 150px;
+          z-index: 10;
+        }
+
+        #massDot {
+          position: absolute;
+          width: 10px;
+          height: 10px;
+          background-color: red;
+          border-radius: 50%;
+          z-index: 15;
+          pointer-events: none;
+          display: none;
+        }
+
+        #bottomControls {
+          margin-top: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        #coordsOutput {
+          font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="sidebar">
+        <button>Панель задач</button>
+        <div class="group-title">Функции</div>
+        <button>Счёт по...</button>
+        <button>Объёму</button>
+        <button>Удельной плотности</button>
+        <button>Массе</button>
+
+        <label class="group-title">Ввести массу элементов</label>
+        <input type="number" id="massFuselage" placeholder="Масса фюзеляжа в кг" />
+        <input type="number" id="massWing" placeholder="Масса крыла в кг" />
+    </div>
+
+    <div class="main">
+        <div class="tabs">
+            <div class="selector-container" id="wingSelectorContainer">
+                <button id="wingSelectorBtn">Крыло ▼</button>
+                <div class="preview-list" id="wingPreviewList">
+                    <img src="images/wing1.png" alt="Крыло 1" data-src="images/wing1.png" class="selected" title="Крыло 1" />
+                    <img src="images/wing2.png" alt="Крыло 2" data-src="images/wing2.png" title="Крыло 2" />
+                </div>
+            </div>
+
+            <div class="selector-container" id="fuselageSelectorContainer">
+                <button id="fuselageSelectorBtn">Фюзеляж ▼</button>
+                <div class="preview-list" id="fuselagePreviewList">
+                    <img src="images/image1.png" alt="Фюзеляж 1" data-src="images/image1.png" class="selected" title="Фюзеляж 1" />
+                    <img src="images/image2.png" alt="Фюзеляж 2" data-src="images/image2.png" title="Фюзеляж 2" />
+                </div>
+            </div>
+
+            <button>Винт</button>
+            <button>Хвост</button>
+            <button>Двигатель</button>
+            <button>Камера</button>
+        </div>
+        <div class="plane" id="plane">
+            <img id="follower" src="images/image1.png" alt="Картинка" />
+            <img id="overlay" src="images/wing1.png" alt="Наложение" />
+            <div id="massDot"></div>
+            <div class="label label-x" style="left: 25%;">50</div>
+            <div class="label label-x" style="left: 50%;">100</div>
+            <div class="label label-x" style="left: 75%;">150</div>
+            <div class="label label-x" style="left: 100%;">200</div>
+
+            <div class="label label-y" style="top: 100%;">0</div>
+            <div class="label label-y" style="top: 75%;">50</div>
+            <div class="label label-y" style="top: 50%;">100</div>
+            <div class="label label-y" style="top: 25%;">150</div>
+            <div class="label label-y" style="top: 0%;">200</div>
+        </div>
+
+        <div id="bottomControls">
+            <button id="btnGetCoords">Показать центр масс</button>
+            <div id="coordsOutput"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const maxCoord = 200;
+    const plane = document.getElementById('plane');
+    const follower = document.getElementById('follower');
+    const overlay = document.getElementById('overlay');
+    const btnGetCoords = document.getElementById('btnGetCoords');
+    const coordsOutput = document.getElementById('coordsOutput');
+    const massFuselageInput = document.getElementById('massFuselage');
+    const massWingInput = document.getElementById('massWing');
+    const massDot = document.getElementById('massDot');
+
+    // Кнопки и списки превью
+    const wingSelectorBtn = document.getElementById('wingSelectorBtn');
+    const fuselageSelectorBtn = document.getElementById('fuselageSelectorBtn');
+    const wingPreviewList = document.getElementById('wingPreviewList');
+    const fuselagePreviewList = document.getElementById('fuselagePreviewList');
+
+    // Для закрытия списков при клике вне
+    document.addEventListener('click', (e) => {
+        if (!wingSelectorBtn.contains(e.target) && !wingPreviewList.contains(e.target)) {
+            wingPreviewList.style.display = 'none';
+        }
+        if (!fuselageSelectorBtn.contains(e.target) && !fuselagePreviewList.contains(e.target)) {
+            fuselagePreviewList.style.display = 'none';
+        }
+    });
+
+    // Тоггл списка крыло
+    wingSelectorBtn.addEventListener('click', () => {
+        fuselagePreviewList.style.display = 'none';
+        wingPreviewList.style.display = wingPreviewList.style.display === 'flex' ? 'none' : 'flex';
+    });
+
+    // Тоггл списка фюзеляж
+    fuselageSelectorBtn.addEventListener('click', () => {
+        wingPreviewList.style.display = 'none';
+        fuselagePreviewList.style.display = fuselagePreviewList.style.display === 'flex' ? 'none' : 'flex';
+    });
+
+    // Обработчик выбора крыльев
+    wingPreviewList.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', () => {
+            // Обновляем выбор — меняем класс selected
+            wingPreviewList.querySelectorAll('img').forEach(i => i.classList.remove('selected'));
+            img.classList.add('selected');
+
+            // Обновляем изображение overlay
+            overlay.src = img.dataset.src;
+
+            // Скрываем список
+            wingPreviewList.style.display = 'none';
+        });
+    });
+
+    // Обработчик выбора фюзеляжа
+    fuselagePreviewList.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', () => {
+            fuselagePreviewList.querySelectorAll('img').forEach(i => i.classList.remove('selected'));
+            img.classList.add('selected');
+
+            follower.src = img.dataset.src;
+
+            fuselagePreviewList.style.display = 'none';
+        });
+    });
+
+    // Остальной твой код без изменений (перемещение, центр масс и т.д.)
+    let dragTarget = null;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    function centerOverlayInFollower() {
+      overlay.style.left = (follower.offsetLeft + (follower.clientWidth - overlay.clientWidth) / 2) + 'px';
+      overlay.style.top = (follower.offsetTop + (follower.clientHeight - overlay.clientHeight) / 2) + 'px';
+    }
+
+    window.addEventListener('load', () => {
+      follower.style.left = '100px';
+      follower.style.top = '100px';
+      centerOverlayInFollower();
+    });
+
+    // Убираю старые селекторы, поэтому их change-обработчики не нужны
+
+    function onMouseDown(e) {
+      if (e.target === follower || e.target === overlay) {
+        dragTarget = e.target;
+        offsetX = e.clientX - dragTarget.offsetLeft;
+        offsetY = e.clientY - dragTarget.offsetTop;
+        dragTarget.style.cursor = 'grabbing';
+        dragTarget.style.zIndex = 20;
+        document.body.style.userSelect = 'none';
+      }
+    }
+
+    function onMouseMove(e) {
+  if (!dragTarget) return;
+
+  const planeRect = plane.getBoundingClientRect();
+
+  let newLeft = e.clientX - offsetX;
+  let newTop = e.clientY - offsetY;
+
+  if (dragTarget === follower) {
+    // Ограничиваем follower внутри plane
+    const minLeft = planeRect.left;
+    const maxLeft = planeRect.left + plane.clientWidth - follower.clientWidth;
+    const minTop = planeRect.top;
+    const maxTop = planeRect.top + plane.clientHeight - follower.clientHeight;
+
+    if (newLeft < minLeft) newLeft = minLeft;
+    if (newLeft > maxLeft) newLeft = maxLeft;
+    if (newTop < minTop) newTop = minTop;
+    if (newTop > maxTop) newTop = maxTop;
+
+    // Задаём позицию относительно plane (отнимаем planeRect)
+    follower.style.left = (newLeft - planeRect.left) + 'px';
+    follower.style.top = (newTop - planeRect.top) + 'px';
+
+    // При этом ограничиваем overlay внутри follower (если overlay вышел за пределы)
+    const maxOverlayLeft = follower.offsetLeft + follower.clientWidth - overlay.clientWidth;
+    const maxOverlayTop = follower.offsetTop + follower.clientHeight - overlay.clientHeight;
+
+    let newOverlayLeft = overlay.offsetLeft;
+    let newOverlayTop = overlay.offsetTop;
+
+    if (newOverlayLeft > maxOverlayLeft) newOverlayLeft = maxOverlayLeft;
+    if (newOverlayTop > maxOverlayTop) newOverlayTop = maxOverlayTop;
+    if (newOverlayLeft < follower.offsetLeft) newOverlayLeft = follower.offsetLeft;
+    if (newOverlayTop < follower.offsetTop) newOverlayTop = follower.offsetTop;
+
+    overlay.style.left = newOverlayLeft + 'px';
+    overlay.style.top = newOverlayTop + 'px';
+  }
+
+  if (dragTarget === overlay) {
+    // Ограничиваем overlay внутри follower
+    const minLeft = follower.offsetLeft;
+    const maxLeft = follower.offsetLeft + follower.clientWidth - overlay.clientWidth;
+    const minTop = follower.offsetTop;
+    const maxTop = follower.offsetTop + follower.clientHeight - overlay.clientHeight;
+
+    if (newLeft < minLeft) newLeft = minLeft;
+    if (newLeft > maxLeft) newLeft = maxLeft;
+    if (newTop < minTop) newTop = minTop;
+    if (newTop > maxTop) newTop = maxTop;
+
+    overlay.style.left = newLeft + 'px';
+    overlay.style.top = newTop + 'px';
+  }
+}
+
+    function onMouseUp() {
+      if (dragTarget) {
+        dragTarget.style.cursor = 'grab';
+        dragTarget.style.zIndex = dragTarget === overlay ? 10 : 5;
+        dragTarget = null;
+        document.body.style.userSelect = 'auto';
+      }
+    }
+
+    follower.style.cursor = 'grab';
+    overlay.style.cursor = 'grab';
+
+    follower.addEventListener('mousedown', onMouseDown);
+    overlay.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
+    // Кнопка показать центр масс
+    btnGetCoords.addEventListener('click', () => {
+      const massFuselage = parseFloat(massFuselageInput.value) || 0;
+      const massWing = parseFloat(massWingInput.value) || 0;
+
+      if (massFuselage <= 0 && massWing <= 0) {
+        coordsOutput.textContent = 'Введите массы элементов!';
+        return;
+      }
+
+      const planeWidth = plane.clientWidth;
+      const planeHeight = plane.clientHeight;
+
+      const centerFuselageX_px = follower.offsetLeft + follower.clientWidth / 2;
+      const centerFuselageY_px = follower.offsetTop + follower.clientHeight / 2;
+
+      const centerWingX_px = overlay.offsetLeft + overlay.clientWidth / 2;
+      const centerWingY_px = overlay.offsetTop + overlay.clientHeight / 2;
+
+      const centerFuselageX = (centerFuselageX_px / planeWidth) * maxCoord;
+      const centerFuselageY = maxCoord - (centerFuselageY_px / planeHeight) * maxCoord;
+
+      const centerWingX = (centerWingX_px / planeWidth) * maxCoord;
+      const centerWingY = maxCoord - (centerWingY_px / planeHeight) * maxCoord;
+
+      const totalMass = massFuselage + massWing;
+
+      const centerMassX = (massFuselage * centerFuselageX + massWing * centerWingX) / totalMass;
+      const centerMassY = (massFuselage * centerFuselageY + massWing * centerWingY) / totalMass;
+
+      coordsOutput.textContent = `Центр масс: X = ${centerMassX.toFixed(1)}, Y = ${centerMassY.toFixed(1)}`;
+
+      const dotX_px = (centerMassX / maxCoord) * planeWidth;
+      const dotY_px = planeHeight - (centerMassY / maxCoord) * planeHeight;
+
+      massDot.style.left = (dotX_px - 5) + 'px';
+      massDot.style.top = (dotY_px - 5) + 'px';
+      massDot.style.display = 'block';
+    });
+</script>
+</body>
+</html>
